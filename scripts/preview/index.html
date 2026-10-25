@@ -1,0 +1,249 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>dsh-memo · 离线预览</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #0e0f12;
+    color: #cfd4dc;
+    font: 13px/1.6 "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    overflow: hidden;
+  }
+  .mock { position: absolute; inset: 0; display: flex; flex-direction: column; }
+  .bar { height: 51px; background: #14161b; border-bottom: 1px solid #23262e; display: flex; align-items: center; padding: 0 16px; color: #9aa0ab; font-size: 12px; }
+  .thread { flex: 1; padding: 28px 64px; max-width: 860px; }
+  .msg { margin-bottom: 14px; padding: 10px 14px; border-radius: 10px; background: #171a20; border: 1px solid #23262e; }
+  .msg.me { background: #1b2330; border-color: #26384a; margin-left: 120px; }
+  .composer { margin: 0 64px 26px; padding: 12px; border-radius: 12px; background: #14161b; border: 1px solid #2a2e38; color: #6f7682; }
+  .composer .row { display: flex; gap: 10px; margin-top: 10px; }
+  .composer .chip { border: 1px solid #2a2e38; border-radius: 8px; padding: 3px 10px; font-size: 12px; color: #9aa0ab; }
+  .hint { position: absolute; left: 16px; bottom: 12px; color: #4c525c; font-size: 11px; }
+</style>
+</head>
+<body>
+  <div class="mock">
+    <div class="bar">DSH · 假宿主（预览用）</div>
+    <div class="thread">
+      <div class="msg">主人：帮我查一下 QQ 机器人的 VPS 端口和最近踩的坑。</div>
+      <div class="msg me">DSH：我先查备忘录目录，再精确取那一节……（工具：memo_outline → memo_project）</div>
+    </div>
+    <div class="composer">
+      问点什么…
+      <div class="row">
+        <span class="chip">＋</span>
+        <span class="chip">只读</span>
+        <span class="chip">计划</span>
+      </div>
+    </div>
+  </div>
+  <span id="seat"></span>
+  <div class="hint">离线预览：真插件代码 + 假宿主 + fixture 数据（不连 DSH）</div>
+
+  <script src="./react-shim.js"></script>
+  <script src="./fixture.js"></script>
+  <script>
+    /* ── 假模块加载器：捕获插件的 load({id,factory}) ─────────────────────── */
+    window.__MEMO_DEF = null
+    window.__ModuleLoader__ = {
+      load: function (def) { window.__MEMO_DEF = def },
+    }
+
+    /* ── 假 fetch：只服务 /api/memo/* ───────────────────────────────────── */
+    window.__CALLS = 0
+    var CAT_RULES = [
+      { key: 'quick', label: '速查', hint: '机器 / 端口 / 解释器 / 目录', re: /^0(\.\d+)?$/ },
+      { key: 'env', label: '环境与坑', hint: '踩过的坑 / 网络与下载 / 工作方式', re: /^(1|2|4|7)(\.\d+)?$/ },
+      { key: 'projects', label: '项目', hint: '每个项目一张卡', re: /^3(\.\d+)?$/ },
+      { key: 'playbook', label: '套路', hint: '可复用的标准步骤', re: /^5(\.\d+)?$/ },
+      { key: 'status', label: '状态', hint: '每个项目做到哪一步', re: /^6(\.\d+)?$/ }
+    ]
+    function buildCats() {
+      var f = window.__FIXTURE
+      var groups = []
+      var byKey = {}
+      CAT_RULES.forEach(function (r) {
+        var g = { key: r.key, label: r.label, hint: r.hint, chars: 0, tokens: 0, sections: [] }
+        byKey[r.key] = g
+        groups.push(g)
+      })
+      var other = { key: 'topic', label: '专题', hint: '独立专题笔记', chars: 0, tokens: 0, sections: [] }
+      groups.push(other)
+      ;(f.sections || []).forEach(function (s) {
+        var rule = null
+        CAT_RULES.forEach(function (r) { if (r.re.test(s.id)) rule = r })
+        var g = rule ? byKey[rule.key] : other
+        g.sections.push(s)
+        g.chars += s.chars || 0
+        g.tokens += s.tokens || 0
+      })
+      return groups.filter(function (g) { return g.sections.length > 0 })
+    }
+    window.fetch = function (url) {
+      var u = String(url)
+      var f = window.__FIXTURE
+      function ok(obj) { return Promise.resolve({ ok: true, json: function () { return Promise.resolve(obj) } }) }
+      if (u.indexOf('status.json') >= 0) {
+        return ok({
+          ok: true, info: f.info, stats: f.stats, log: f.log, sections: f.sections,
+          categories: buildCats(),
+          lite: { exists: false }
+        })
+      }
+      if (u.indexOf('ping.json') >= 0) {
+        return ok({ ok: true, calls: window.__CALLS, errors: 0, startedAt: 0, last: null })
+      }
+      if (u.indexOf('compact.json') >= 0) {
+        return ok({
+          ok: true,
+          text: '已生成精简版 MEMO.lite.md：191,790 → 36,053 chars（省 81%）· 保留 86 个标题 / 509 行，压掉 1,784 行 · 原文件一字未动',
+          before: 191790, after: 36053, savedPct: 81, kept: 509, dropped: 1784
+        })
+      }
+      if (u.indexOf('section.json') >= 0) {
+        var id = decodeURIComponent((u.split('id=')[1] || '').split('&')[0])
+        var text = f.detail[id] || ('§' + id + '（fixture 只备了 0.2 与 3.6 的正文）')
+        return ok({ ok: true, id: id, text: text })
+      }
+      if (u.indexOf('search.json') >= 0) {
+        var q = decodeURIComponent((u.split('q=')[1] || '').split('&')[0])
+        var hit = f.search[q]
+        if (hit) return ok({ ok: true, hits: 3, text: hit })
+        return ok({ ok: true, hits: 0, text: '没有命中「' + q + '」（fixture 只备了 8199 与 port）' })
+      }
+      return Promise.reject(new Error('unknown endpoint: ' + u))
+    }
+  </script>
+
+  <script>
+    window.__ERR = ''
+    window.onerror = function (msg, src, line, col) {
+      window.__ERR = String(msg) + ' @' + line + ':' + col
+    }
+  </script>
+
+  <!-- 无头截图时 virtual-time 不推进 rAF、performance.now 也可能冻结：
+       改成 setTimeout 驱动 + 自增时间戳，才能截到动画中间帧 -->
+  <script>
+    (function () {
+      var n = 0
+      var raf = window.requestAnimationFrame
+      window.__RAF_MOCK = false
+      window.requestAnimationFrame = function (cb) {
+        if (typeof raf === 'function' && !window.__RAF_MOCK) return raf.call(window, cb)
+        if (n++ > 600) return 0
+        var k = n
+        return setTimeout(function () { cb(1000 + k * 16) }, 16)
+      }
+      window.cancelAnimationFrame = function (id) { try { clearTimeout(id) } catch (e) { /* ignore */ } }
+    })()
+  </script>
+
+  <!-- ★ 与真机加载的是同一份产物 -->
+  <script src="../../lib/client.js"></script>
+
+  <script>
+    (function () {
+      var def = window.__MEMO_DEF
+      if (!def) { document.title = 'FAIL no-def'; return }
+
+      var mod = def.factory(function (name) {
+        if (name === 'react') return window.ReactShim.asModule()
+        throw new Error('unknown module ' + name)
+      })
+
+      var registered = null
+      var ctx = {
+        slots: {
+          inject: function (name, cb) { return cb() },
+          register: function (opts, Comp) { registered = { opts: opts, Comp: Comp }; return function () {} },
+        },
+      }
+      mod.apply(ctx)
+      if (!registered) { document.title = 'FAIL no-slot'; return }
+
+      /* 渲染 React 座位（useEffect 里会挂按钮 + 面板） */
+      var seat = document.getElementById('seat')
+      window.ReactShim.render(window.ReactShim.createElement(registered.Comp, {}), seat)
+
+      /* 打开面板并等一次刷新 */
+      var btn = document.getElementById('dshmemo-btn')
+      if (!btn) { document.title = 'FAIL no-button'; return }
+      btn.click()
+
+      setTimeout(function () {
+        var panel = document.getElementById('dshmemo-panel')
+        var rows = panel ? panel.querySelectorAll('.dshmemo-row').length : -1
+        document.title = 'READY panel=' + (panel ? !panel.hidden : false) + ' rows=' + rows
+
+        /* #cats / #confirm / #anim / #section:3.6 / #search:8199 —— 截图脚本用的动作钩子 */
+        var mode = String(location.hash || '').replace('#', '')
+        if (panel && mode === 'cats') {
+          var tabC = panel.querySelector('[data-tab="cats"]')
+          if (tabC) tabC.click()
+        } else if (panel && mode === 'confirm') {
+          var cbtn = panel.querySelector('[data-act="compact"]')
+          if (cbtn) cbtn.click()
+        } else if (panel && mode === 'anim') {
+          /* 模拟「AI 查了一次备忘录」→ 右上角按钮应展开成动画窗口 */
+          window.__RAF_MOCK = true
+          /* 预览环境没有真视频：让 play() 立刻失败，专门验证 Canvas 兜底链路 */
+          try {
+            HTMLMediaElement.prototype.play = function () {
+              return Promise.reject(new Error('preview-no-video'))
+            }
+          } catch (e) { /* ignore */ }
+          setTimeout(function () { window.__CALLS = 1 }, 250)
+          setTimeout(function () {
+            var c = document.getElementById('dshmemo-shelf')
+            var b2 = document.getElementById('dshmemo-btn')
+            var px = 'btn=' + (b2 ? Math.round(b2.getBoundingClientRect().width) + 'x' + Math.round(b2.getBoundingClientRect().height) + (b2.classList.contains('dshmemo-playing') ? ' PLAYING' : '') : 'NONE')
+            var box = 'n/a'
+            try {
+              if (c) {
+                var ctx2 = c.getContext('2d')
+                var mid = ctx2.getImageData(Math.floor(c.width / 2), Math.floor(c.height / 2), 1, 1).data
+                px = 'mid=[' + mid[0] + ',' + mid[1] + ',' + mid[2] + ',' + mid[3] + ']'
+                var all = ctx2.getImageData(0, 0, c.width, c.height).data
+                var blue = 0
+                var bright = 0
+                for (var i = 0; i < all.length; i += 4) {
+                  if (all[i + 2] - all[i] > 18) blue += 1
+                  if (all[i + 2] > 90) bright += 1
+                }
+                px += ' bluePx=' + blue + ' brightPx=' + bright
+                var r = c.getBoundingClientRect()
+                box = 'rect=' + Math.round(r.left) + ',' + Math.round(r.top) + ',' + Math.round(r.width) + 'x' + Math.round(r.height)
+                var cs = getComputedStyle(c)
+                box += ' z=' + cs.zIndex + ' op=' + cs.opacity + ' disp=' + cs.display
+              }
+            } catch (e) { px = 'read-err ' + String(e.message || e) }
+            var d = document.createElement('div')
+            d.style.cssText = 'position:fixed;left:10px;bottom:44px;z-index:9999999;color:#ff8080;'
+              + 'font:12px monospace;background:rgba(0,0,0,.85);padding:4px 8px;border-radius:6px;max-width:1240px;line-height:1.5'
+            d.textContent = 'DIAG canvas=' + (c ? c.width + 'x' + c.height + ' hidden=' + c.hidden : 'NONE')
+              + ' | ' + px + ' | ' + box + ' | err=' + String(window.__ERR || 'none')
+            document.body.appendChild(d)
+          }, 2600)
+        } else if (panel && mode.indexOf('section:') === 0) {
+          var tab2 = panel.querySelector('[data-tab="cats"]')
+          if (tab2) tab2.click()
+          setTimeout(function () {
+            var row = panel.querySelector('[data-section="' + mode.slice(8) + '"]')
+            if (row) row.click()
+          }, 150)
+        } else if (panel && mode.indexOf('search:') === 0) {
+          var input = panel.querySelector('[data-el="q"]')
+          if (input) {
+            input.value = decodeURIComponent(mode.slice(7))
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+          }
+        }
+        setTimeout(function () { document.title = 'DONE ' + mode }, 600)
+      }, 400)
+    })()
+  </script>
+</body>
+</html>

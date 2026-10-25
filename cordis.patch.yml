@@ -1,0 +1,13 @@
+# dsh-memo —— bundle 自己的补丁层
+#
+# 只负责把插件本体的 host 行插进来；不碰 profile 的 package.json。
+#
+# 可调项：
+#   file        备忘录路径。留空 = 自动取 ~/.dsh/MEMO.md（别人装了也能直接用）
+#   tokenChars  token 估算系数（中英混排经验值 3.2 字符 ≈ 1 token，只用于展示）
+- insert:
+    - id: memo
+      name: 'dsh-memo'
+      config:
+        # file: 'C:\Users\q3153\.dsh\MEMO.md'
+        tokenChars: 3.2

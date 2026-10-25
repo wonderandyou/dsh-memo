@@ -1,0 +1,49 @@
+{
+  "name": "dsh-memo",
+  "version": "0.1.0",
+  "description": "给自己的备忘录做一组查询接口：按目录 / 按节 / 全文搜索 / 项目卡 / 速查表 / 套路 / 追加，一次几百 token 就能查到事实，不用把整份 MEMO.md 读进上下文。右上角面板能看到每次查询的时间、参数、命中、返回大小与节省比例。",
+  "meta": {
+    "title": "(工具)备忘录",
+    "description": "按需查 MEMO.md：目录、按节、搜索、项目卡、速查表；右上角面板显示每次查询用了多少 token、省了多少。"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "slots"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "files": [
+    "lib",
+    "assets",
+    "cordis.patch.yml",
+    "README.md",
+    "icon.svg"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "memo",
+    "notes",
+    "knowledge-base"
+  ],
+  "author": "@奇迹与你",
+  "license": "MIT"
+}
